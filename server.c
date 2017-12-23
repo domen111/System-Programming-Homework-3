@@ -93,8 +93,8 @@ int main( int argc, char** argv ) {
     maxfd = getdtablesize();
     requestP = ( http_request* ) malloc( sizeof( http_request ) * maxfd );
     if ( requestP == (http_request*) 0 ) {
-    fprintf( stderr, "out of memory allocating all http requests\n" );
-    exit( 1 );
+        fprintf( stderr, "out of memory allocating all http requests\n" );
+        exit( 1 );
     }
     for ( i = 0; i < maxfd; i ++ )
         init_request( &requestP[i] );
@@ -105,49 +105,49 @@ int main( int argc, char** argv ) {
 
     // Main loop.
     while (1) {
-    // Wait for a connection.
-    clilen = sizeof(cliaddr);
-    conn_fd = accept( server.listen_fd, (struct sockaddr *) &cliaddr, (socklen_t *) &clilen );
-    if ( conn_fd < 0 ) {
-        if ( errno == EINTR || errno == EAGAIN ) continue; // try again
-        if ( errno == ENFILE ) {
-            (void) fprintf( stderr, "out of file descriptor table ... (maxconn %d)\n", maxfd );
-            continue;
+        // Wait for a connection.
+        clilen = sizeof(cliaddr);
+        conn_fd = accept( server.listen_fd, (struct sockaddr *) &cliaddr, (socklen_t *) &clilen );
+        if ( conn_fd < 0 ) {
+            if ( errno == EINTR || errno == EAGAIN ) continue; // try again
+            if ( errno == ENFILE ) {
+                (void) fprintf( stderr, "out of file descriptor table ... (maxconn %d)\n", maxfd );
+                continue;
             }
-        ERR_EXIT( "accept" )
-    }
+            ERR_EXIT( "accept" )
+        }
         requestP[conn_fd].conn_fd = conn_fd;
         requestP[conn_fd].status = READING;
-    strcpy( requestP[conn_fd].host, inet_ntoa( cliaddr.sin_addr ) );
+        strcpy( requestP[conn_fd].host, inet_ntoa( cliaddr.sin_addr ) );
         set_ndelay( conn_fd );
 
         fprintf( stderr, "getting a new request... fd %d from %s\n", conn_fd, requestP[conn_fd].host );
 
-    while (1) {
-        ret = read_header_and_file( &requestP[conn_fd], &err );
-        if ( ret > 0 ) continue;
-        else if ( ret < 0 ) {
-            // error for reading http header or requested file
-            fprintf( stderr, "error on fd %d, code %d\n",
-            requestP[conn_fd].conn_fd, err );
-            requestP[conn_fd].status = ERROR;
-            close( requestP[conn_fd].conn_fd );
-            free_request( &requestP[conn_fd] );
-            break;
-        } else if ( ret == 0 ) {
-            // ready for writing
-            fprintf( stderr, "writing (buf %p, idx %d) %d bytes to request fd %d\n",
-            requestP[conn_fd].buf, (int) requestP[conn_fd].buf_idx,
-            (int) requestP[conn_fd].buf_len, requestP[conn_fd].conn_fd );
+        while (1) {
+            ret = read_header_and_file( &requestP[conn_fd], &err );
+            if ( ret > 0 ) continue;
+            else if ( ret < 0 ) {
+                // error for reading http header or requested file
+                fprintf( stderr, "error on fd %d, code %d\n",
+                    requestP[conn_fd].conn_fd, err );
+                requestP[conn_fd].status = ERROR;
+                close( requestP[conn_fd].conn_fd );
+                free_request( &requestP[conn_fd] );
+                break;
+            } else if ( ret == 0 ) {
+                // ready for writing
+                fprintf( stderr, "writing (buf %p, idx %d) %d bytes to request fd %d\n",
+                    requestP[conn_fd].buf, (int) requestP[conn_fd].buf_idx,
+                    (int) requestP[conn_fd].buf_len, requestP[conn_fd].conn_fd );
 
-        // write once only and ignore error
-            nwritten = write( requestP[conn_fd].conn_fd, requestP[conn_fd].buf, requestP[conn_fd].buf_len );
-            fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, requestP[conn_fd].conn_fd );
-            close( requestP[conn_fd].conn_fd );
-            free_request( &requestP[conn_fd] );
-            break;
+                // write once only and ignore error
+                nwritten = write( requestP[conn_fd].conn_fd, requestP[conn_fd].buf, requestP[conn_fd].buf_len );
+                fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, requestP[conn_fd].conn_fd );
+                close( requestP[conn_fd].conn_fd );
+                free_request( &requestP[conn_fd] );
+                break;
+            }
         }
-    }
     }
     free( requestP );
     return 0;
