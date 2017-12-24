@@ -221,12 +221,12 @@ static int read_header_and_file( http_request* reqP, int *errP ) {
 
     // Read in request from client
     while (1) {
-    r = read( reqP->conn_fd, buf, sizeof(buf) );
-    if ( r < 0 && ( errno == EINTR || errno == EAGAIN ) ) return 1;
-    if ( r <= 0 ) ERR_RET( 1 )
-    add_to_buf( reqP, buf, r );
-    if ( strstr( reqP->buf, "\015\012\015\012" ) != (char*) 0 ||
-         strstr( reqP->buf, "\012\012" ) != (char*) 0 ) break;
+        r = read( reqP->conn_fd, buf, sizeof(buf) );
+        if ( r < 0 && ( errno == EINTR || errno == EAGAIN ) ) return 1;
+        if ( r <= 0 ) ERR_RET( 1 )
+        add_to_buf( reqP, buf, r );
+        if ( strstr( reqP->buf, "\015\012\015\012" ) != (char*) 0 ||
+             strstr( reqP->buf, "\012\012" ) != (char*) 0 ) break;
     }
     // fprintf( stderr, "header: %s\n", reqP->buf );
 
@@ -260,6 +260,7 @@ static int read_header_and_file( http_request* reqP, int *errP ) {
     strcpy( reqP->file, file );
     strcpy( reqP->query, query );
 
+    fprintf( stderr, "query: %s reqP->file: %s\n", query, reqP->file );
     /*
     if ( query[0] == (char) 0 ) {
         // for file request, read it in buf
@@ -269,7 +270,7 @@ static int read_header_and_file( http_request* reqP, int *errP ) {
         fd = open( reqP->file, O_RDONLY );
         if ( fd < 0 ) ERR_RET( 7 )
 
-    reqP->buf_len = 0;
+        reqP->buf_len = 0;
 
         buflen = snprintf( buf, sizeof(buf), "HTTP/1.1 200 OK\015\012Server: SP TOY\015\012" );
         add_to_buf( reqP, buf, buflen );
@@ -277,21 +278,20 @@ static int read_header_and_file( http_request* reqP, int *errP ) {
         (void) strftime( timebuf, sizeof(timebuf), "%a, %d %b %Y %H:%M:%S GMT", gmtime( &now ) );
         buflen = snprintf( buf, sizeof(buf), "Date: %s\015\012", timebuf );
         add_to_buf( reqP, buf, buflen );
-    buflen = snprintf(
-        buf, sizeof(buf), "Content-Length: %ld\015\012", (int64_t) sb.st_size );
+        buflen = snprintf( buf, sizeof(buf), "Content-Length: %ld\015\012", (int64_t) sb.st_size );
         add_to_buf( reqP, buf, buflen );
         buflen = snprintf( buf, sizeof(buf), "Connection: close\015\012\015\012" );
         add_to_buf( reqP, buf, buflen );
 
-    ptr = mmap( 0, (size_t) sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
-    if ( ptr == (void*) -1 ) ERR_RET( 8 )
+        ptr = mmap( 0, (size_t) sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
+        if ( ptr == (void*) -1 ) ERR_RET( 8 )
         add_to_buf( reqP, ptr, sb.st_size );
-    (void) munmap( ptr, sb.st_size );
-    close( fd );
-    // printf( "%s\n", reqP->buf );
-    // fflush( stdout );
-    reqP->buf_idx = 0; // writing from offset 0
-    return 0;
+        (void) munmap( ptr, sb.st_size );
+        close( fd );
+        printf( "%s\n", reqP->buf );
+        fflush( stdout );
+        reqP->buf_idx = 0; // writing from offset 0
+        return 0;
     }
     */
 
