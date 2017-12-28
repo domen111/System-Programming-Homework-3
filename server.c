@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/wait.h>
 
 #define TIMEOUT_SEC 5       // timeout in seconds for wait for a connection
 #define MAXBUFSIZE  1024    // timeout in seconds for wait for a connection
@@ -38,6 +39,7 @@ typedef struct {
 static char* logfilenameP;  // log file name
 
 http_request **pipe_fd_to_reqP;
+int *pipe_fd_to_pid;
 
 
 // Forwards
@@ -67,7 +69,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 static void set_ndelay( int fd );
 // Set NDELAY mode on a socket.
 
-void write_http_response( http_request *reqP, char *str, size_t len );
+void write_http_response( http_request *reqP, char *str, size_t len, char *status, char *content_type );
 
 int main( int argc, char** argv ) {
     http_server server;     // http server
@@ -105,6 +107,7 @@ int main( int argc, char** argv ) {
     requestP[ server.listen_fd ].conn_fd = server.listen_fd;
     requestP[ server.listen_fd ].status = READING;
     pipe_fd_to_reqP = (http_request**) malloc( sizeof(http_request*) * maxfd);
+    pipe_fd_to_pid = (int*) malloc( sizeof(int) * maxfd);
 
     fprintf( stderr, "\nstarting on %.80s, port %d, fd %d, maxconn %d, logfile %s...\n", server.hostname, server.port, server.listen_fd, maxfd, logfilenameP );
 
@@ -145,6 +148,12 @@ int main( int argc, char** argv ) {
                     // error for reading http header or requested file
                     fprintf( stderr, "error on fd %d, code %d\n",
                         requestP[conn_fd].conn_fd, err );
+                    if (err == 4) {
+                        char message[] = "<h1>400 Bad Request</h1> <br> only [a-z A-Z _] are allow in cgi_program and filename";
+                        write_http_response( &requestP[conn_fd], message, strlen(message), "400 Bad Request", "text/html; charset=utf-8" );
+                    }
+                    nwritten = write( requestP[conn_fd].conn_fd, requestP[conn_fd].buf, requestP[conn_fd].buf_len );
+                    fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, requestP[conn_fd].conn_fd );
                     requestP[conn_fd].status = ERROR;
                     close( requestP[conn_fd].conn_fd );
                     free_request( &requestP[conn_fd] );
@@ -171,7 +180,14 @@ int main( int argc, char** argv ) {
                     char *buf = (char*)malloc( sizeof(char)*1048576 );
                     int len = read( i, buf, 1048576 );
                     fprintf(stderr, "buf: %s\\buf\n", buf);
-                    write_http_response( reqP, buf, len );
+                    int stat;
+                    waitpid(pipe_fd_to_pid[i], &stat, 0);
+                    if (stat == 0) {
+                        write_http_response( reqP, buf, len, "200 OK", "text/plain; charset=utf-8");
+                    } else {
+                        char message[] = "<h1>404 Not Found</h1> <br> cgi_program encounter an error.";
+                        write_http_response( reqP, message, strlen(message), "404 Not Found", "text/html; charset=utf-8");
+                    }
                     FD_CLR( i, &master_set );
                     close( i );
                     free(buf);
@@ -191,6 +207,7 @@ int main( int argc, char** argv ) {
     }
     free( requestP );
     free( pipe_fd_to_reqP );
+    free( pipe_fd_to_pid );
     return 0;
 }
 

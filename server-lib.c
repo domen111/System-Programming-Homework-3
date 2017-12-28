@@ -1,6 +1,3 @@
-// ======================================================================================================
-// You don't need to know how the following codes are working
-
 #include <time.h>
 #include <fcntl.h>
 #include <ctype.h>
@@ -13,6 +10,7 @@ static int hexit( char c );
 static char* get_request_line( http_request *reqP );
 static void* e_malloc( size_t size );
 static void* e_realloc( void* optr, size_t size );
+char *decode_query( char *query, char *get );
 
 static void init_request( http_request* reqP ) {
     reqP->conn_fd = -1;
@@ -86,6 +84,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         query = "";
     else
         *query++ = '\0';
+    char *query_filename = decode_query(query, "file_name");
 
     if ( strcasecmp( method_str, "GET" ) != 0 ) ERR_RET( 3 )
     else {
@@ -96,6 +95,13 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 
     if ( strlen( file ) >= MAXBUFSIZE-1 ) ERR_RET( 4 )
     if ( strlen( query ) >= MAXBUFSIZE-1 ) ERR_RET( 5 )
+
+    for ( int i = 0; file[i]; i++)
+        if ( !( (file[i]<='z' && file[i]>='a') || (file[i]>='A' && file[i]<='Z') || file[i]=='_' ) )
+            ERR_RET( 4 );
+    for ( int i = 0; query_filename[i]; i++)
+        if ( !( (query_filename[i]<='z' && query_filename[i]>='a') || (query_filename[i]>='A' && query_filename[i]<='Z') || query_filename[i]=='_' ) )
+            ERR_RET( 4 );
 
     strcpy( reqP->file, file );
     strcpy( reqP->query, query );
@@ -111,7 +117,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
     if ( query[0] == (char) 0 ) {
         ptr = mmap( 0, (size_t) sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
         if ( ptr == (void*) -1 ) ERR_RET( 8 )
-        write_http_response( reqP, (char*)ptr, sb.st_size );
+        write_http_response( reqP, (char*)ptr, sb.st_size, "200 OK", "text/plain; charset=utf-8" );
         (void) munmap( ptr, sb.st_size );
         close( fd );
         return 0;
@@ -119,7 +125,8 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         int in_fd[2], out_fd[2];
         pipe(in_fd);
         pipe(out_fd);
-        if ( fork() == 0 ) {
+        int pid;
+        if ( (pid = fork()) == 0 ) {
             dup2(in_fd[0], 0);
             dup2(out_fd[1], 1);
             // fprintf(stderr, "exec\n");
@@ -127,10 +134,11 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
             execl(file, file, (char*)0);
         } else {
             close(in_fd[0]); close(out_fd[1]);
-            write(in_fd[1], query, strlen(query));
+            write(in_fd[1], query_filename, strlen(query));
             close(in_fd[1]);
             FD_SET(out_fd[0], master_set);
             pipe_fd_to_reqP[out_fd[0]] = reqP;
+            pipe_fd_to_pid[out_fd[0]] = pid;
             fprintf(stderr, "pipe_fd_to_reqP[%d] = %p\n", out_fd[0], reqP );
         }
         return 2;
@@ -139,7 +147,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
     return 0;
 }
 
-void write_http_response( http_request *reqP, char *str, size_t len ) {
+void write_http_response( http_request *reqP, char *str, size_t len, char *status, char *content_type ) {
     fprintf(stderr, "write_http_response\n");
     int buflen;
     char timebuf[100];
@@ -148,13 +156,15 @@ void write_http_response( http_request *reqP, char *str, size_t len ) {
 
     reqP->buf_len = 0;
 
-    buflen = snprintf( buf, sizeof(buf), "HTTP/1.1 200 OK\015\012Server: SP TOY\015\012" );
+    buflen = snprintf( buf, sizeof(buf), "HTTP/1.1 %s\015\012Server: SP TOY\015\012", status );
     add_to_buf( reqP, buf, buflen );
     now = time( (time_t*) 0 );
     (void) strftime( timebuf, sizeof(timebuf), "%a, %d %b %Y %H:%M:%S GMT", gmtime( &now ) );
     buflen = snprintf( buf, sizeof(buf), "Date: %s\015\012", timebuf );
     add_to_buf( reqP, buf, buflen );
     buflen = snprintf( buf, sizeof(buf), "Content-Length: %ld\015\012", (int64_t) len );
+    add_to_buf( reqP, buf, buflen );
+    buflen = snprintf( buf, sizeof(buf), "Content-Type: %s\015\012", content_type );
     add_to_buf( reqP, buf, buflen );
     buflen = snprintf( buf, sizeof(buf), "Connection: close\015\012\015\012" );
     add_to_buf( reqP, buf, buflen );
@@ -289,4 +299,22 @@ static void* e_realloc( void* optr, size_t size ) {
         exit( 1 );
     }
     return ptr;
+}
+
+char *decode_query( char *query, char *get ) {
+    char *pch = strtok(query, "&");
+    while (pch != NULL) {
+        int i, ok = 1;
+        for (i = 0; pch[i] != '=' && pch[i]; i++) {
+            if (get[i] != pch[i]) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ok) {
+            return pch + i + 1; 
+        }
+        pch = strtok (NULL, "&");
+    }
+    return NULL;
 }
