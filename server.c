@@ -71,6 +71,8 @@ static void set_ndelay( int fd );
 
 void write_http_response( http_request *reqP, char *str, size_t len, char *status, char *content_type );
 
+void info();
+
 int main( int argc, char** argv ) {
     http_server server;     // http server
     http_request* requestP = NULL;// pointer to http requests from client
@@ -110,6 +112,8 @@ int main( int argc, char** argv ) {
     pipe_fd_to_pid = (int*) malloc( sizeof(int) * maxfd);
 
     fprintf( stderr, "\nstarting on %.80s, port %d, fd %d, maxconn %d, logfile %s...\n", server.hostname, server.port, server.listen_fd, maxfd, logfilenameP );
+
+	signal(SIGUSR1, info);
 
     // Main loop.
     fd_set master_set, working_set;

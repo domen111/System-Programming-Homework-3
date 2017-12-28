@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <signal.h>
 
 static void add_to_buf( http_request *reqP, char* str, size_t len );
 static void strdecode( char* to, char* from );
@@ -105,11 +106,29 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 
     if (file[0] == '\0')
         strcpy(file, "index");
+    sigset_t waitmask, emptymask;
+    sigemptyset(&waitmask);
+    sigemptyset(&emptymask);
+    sigaddset(&waitmask, SIGUSR1);
+    sigprocmask(SIG_BLOCK, &waitmask, NULL);
+    if (strcmp(file, "info")==0) {
+        if (fork()==0) {
+            kill(getppid(), SIGUSR1);
+            exit(0);
+        }
+    }
 
     strcpy( reqP->file, file );
     strcpy( reqP->query, query );
 
     fprintf( stderr, "query: %s file: %s\n", query, file );
+
+    if ( strcmp(file, "info") == 0 ) {
+        sigsuspend(&emptymask);
+        char message[] = "<h1>info</h1> <br> cgi_program encounter an error.";
+        write_http_response( reqP, message, strlen(message), "200 OK", "text/html; charset=utf-8" );
+        return 0;
+    }
 
     r = stat( reqP->file, &sb );
     if ( r < 0 ) ERR_RET( 6 )
@@ -321,3 +340,7 @@ char *decode_query( char *query, char *get ) {
     }
     return query + strlen(query);
 }
+
+void info() {
+}
+
