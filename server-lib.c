@@ -103,6 +103,9 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         if ( !( (query_filename[i]<='z' && query_filename[i]>='a') || (query_filename[i]>='A' && query_filename[i]<='Z') || query_filename[i]=='_' ) )
             ERR_RET( 4 );
 
+    if (file[0] == '\0')
+        strcpy(file, "index");
+
     strcpy( reqP->file, file );
     strcpy( reqP->query, query );
 
