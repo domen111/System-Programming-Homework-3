@@ -151,6 +151,9 @@ int main( int argc, char** argv ) {
                     if (err == 4) {
                         char message[] = "<h1>400 Bad Request</h1> <br> only [a-z A-Z _] are allow in cgi_program and filename";
                         write_http_response( &requestP[conn_fd], message, strlen(message), "400 Bad Request", "text/html; charset=utf-8" );
+                    } else if (err == 6) {
+                        char message[] = "<h1>404 Not Found</h1> <br> cgi_program not found";
+                        write_http_response( &requestP[conn_fd], message, strlen(message), "404 Not Found", "text/html; charset=utf-8" );
                     }
                     nwritten = write( requestP[conn_fd].conn_fd, requestP[conn_fd].buf, requestP[conn_fd].buf_len );
                     fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, requestP[conn_fd].conn_fd );

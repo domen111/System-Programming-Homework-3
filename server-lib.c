@@ -117,7 +117,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
     if ( query[0] == (char) 0 ) {
         ptr = mmap( 0, (size_t) sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
         if ( ptr == (void*) -1 ) ERR_RET( 8 )
-        write_http_response( reqP, (char*)ptr, sb.st_size, "200 OK", "text/plain; charset=utf-8" );
+        write_http_response( reqP, (char*)ptr, sb.st_size, "200 OK", "text/html; charset=utf-8" );
         (void) munmap( ptr, sb.st_size );
         close( fd );
         return 0;
@@ -316,5 +316,5 @@ char *decode_query( char *query, char *get ) {
         }
         pch = strtok (NULL, "&");
     }
-    return NULL;
+    return query + strlen(query);
 }
