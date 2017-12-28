@@ -73,6 +73,24 @@ void write_http_response( http_request *reqP, char *str, size_t len, char *statu
 
 void info();
 
+int running_pids[1024] = {0}, finished_pids[1024] = {1,2,0};
+
+void add_pid(int p) {
+	int i;
+	for(i=0; running_pids[i]; i++);
+	running_pids[i] = p;
+	running_pids[i+1] = 0;
+}
+void finish_pid(int p) {
+	int i;
+	for(i=0; running_pids[i] != p; i++);
+	for(; running_pids[i]; i++)
+		running_pids[i] = running_pids[i+1];
+	for(i=0; finished_pids[i]; i++);
+	finished_pids[i] = p;
+	finished_pids[i+1] = 0;
+}
+
 int main( int argc, char** argv ) {
     http_server server;     // http server
     http_request* requestP = NULL;// pointer to http requests from client
@@ -189,6 +207,7 @@ int main( int argc, char** argv ) {
                     fprintf(stderr, "buf: %s\\buf\n", buf);
                     int stat;
                     waitpid(pipe_fd_to_pid[i], &stat, 0);
+					finish_pid(pipe_fd_to_pid[i]);
                     if (stat == 0) {
                         write_http_response( reqP, buf, len, "200 OK", "text/plain; charset=utf-8");
                     } else {

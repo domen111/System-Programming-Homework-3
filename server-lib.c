@@ -125,7 +125,17 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 
     if ( strcmp(file, "info") == 0 ) {
         sigsuspend(&emptymask);
-        char message[] = "<h1>info</h1> <br> cgi_program encounter an error.";
+        char running[1024] = "";
+        int len = 0;
+        for(int i = 0; running_pids[i]; i++)
+            len += sprintf(running+len, "%d ", running_pids[i]);
+        char finished[1024] = "";
+        len = 0;
+        for(int i = 0; finished_pids[i]; i++)
+            len += sprintf(finished+len, "%d ", finished_pids[i]);
+        char message_fmt[] = "<h1>info</h1> <br>running: %s<br>finished:%s";
+        char message[sizeof(message_fmt)+2048];
+        sprintf(message, message_fmt, running, finished);
         write_http_response( reqP, message, strlen(message), "200 OK", "text/html; charset=utf-8" );
         return 0;
     }
@@ -161,6 +171,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
             FD_SET(out_fd[0], master_set);
             pipe_fd_to_reqP[out_fd[0]] = reqP;
             pipe_fd_to_pid[out_fd[0]] = pid;
+            add_pid(pid);
             fprintf(stderr, "pipe_fd_to_reqP[%d] = %p\n", out_fd[0], reqP );
         }
         return 2;
