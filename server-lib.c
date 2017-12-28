@@ -13,6 +13,11 @@ static void* e_malloc( size_t size );
 static void* e_realloc( void* optr, size_t size );
 char *decode_query( char *query, char *get );
 
+typedef struct {
+    char name[100];
+    char time[100];
+} TimeInfo;
+
 static void init_request( http_request* reqP ) {
     reqP->conn_fd = -1;
     reqP->status = 0;       // not used
@@ -125,6 +130,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 
     if ( strcmp(file, "info") == 0 ) {
         sigsuspend(&emptymask);
+
         char running[1024] = "";
         int len = 0;
         for(int i = 0; running_pids[i]; i++)
@@ -133,9 +139,13 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         len = 0;
         for(int i = 0; finished_pids[i]; i++)
             len += sprintf(finished+len, "%d ", finished_pids[i]);
-        char message_fmt[] = "<h1>info</h1> <br>running: %s<br>finished:%s";
+        
+        fd = open(logfilenameP, O_RDWR);
+        TimeInfo *p_map = (TimeInfo*)mmap(0, sizeof(TimeInfo),  PROT_READ,  MAP_SHARED, fd, 0);
+        
+        char message_fmt[] = "<h1>info</h1> <br>running: %s<br>finished:%s<br>exit time: %s %s";
         char message[sizeof(message_fmt)+2048];
-        sprintf(message, message_fmt, running, finished);
+        sprintf(message, message_fmt, running, finished, p_map->time, p_map->name);
         write_http_response( reqP, message, strlen(message), "200 OK", "text/html; charset=utf-8" );
         return 0;
     }

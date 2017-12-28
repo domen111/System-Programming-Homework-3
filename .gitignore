@@ -2,3 +2,4 @@ server
 file_reader
 slow_file_reader
 *.swp
+log

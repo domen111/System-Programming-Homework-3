@@ -73,7 +73,7 @@ void write_http_response( http_request *reqP, char *str, size_t len, char *statu
 
 void info();
 
-int running_pids[1024] = {0}, finished_pids[1024] = {1,2,0};
+int running_pids[1024] = {0}, finished_pids[1024] = {0};
 
 void add_pid(int p) {
 	int i;
