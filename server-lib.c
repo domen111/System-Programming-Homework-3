@@ -57,10 +57,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
     char* method_str = (char *) 0;
     int r, fd;
     struct stat sb;
-    char timebuf[100];
-    int buflen;
     char buf[10000];
-    time_t now;
     void *ptr;
 
     // Read in request from client
@@ -70,9 +67,8 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         if ( r <= 0 ) ERR_RET( 1 )
         add_to_buf( reqP, buf, r );
         if ( strstr( reqP->buf, "\015\012\015\012" ) != (char*) 0 ||
-             strstr( reqP->buf, "\012\012" ) != (char*) 0 ) break;
+            strstr( reqP->buf, "\012\012" ) != (char*) 0 ) break;
     }
-    // fprintf( stderr, "header: %s\n", reqP->buf );
 
     // Parse the first line of the request.
     method_str = get_request_line( reqP );
@@ -106,7 +102,6 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 
     fprintf( stderr, "query: %s file: %s\n", query, file );
 
-    // for file request, read it in buf
     r = stat( reqP->file, &sb );
     if ( r < 0 ) ERR_RET( 6 )
 
@@ -114,27 +109,11 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
     if ( fd < 0 ) ERR_RET( 7 )
 
     if ( query[0] == (char) 0 ) {
-        reqP->buf_len = 0;
-
-        buflen = snprintf( buf, sizeof(buf), "HTTP/1.1 200 OK\015\012Server: SP TOY\015\012" );
-        add_to_buf( reqP, buf, buflen );
-        now = time( (time_t*) 0 );
-        (void) strftime( timebuf, sizeof(timebuf), "%a, %d %b %Y %H:%M:%S GMT", gmtime( &now ) );
-        buflen = snprintf( buf, sizeof(buf), "Date: %s\015\012", timebuf );
-        add_to_buf( reqP, buf, buflen );
-        buflen = snprintf( buf, sizeof(buf), "Content-Length: %ld\015\012", (int64_t) sb.st_size );
-        add_to_buf( reqP, buf, buflen );
-        buflen = snprintf( buf, sizeof(buf), "Connection: close\015\012\015\012" );
-        add_to_buf( reqP, buf, buflen );
-
         ptr = mmap( 0, (size_t) sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
         if ( ptr == (void*) -1 ) ERR_RET( 8 )
-        add_to_buf( reqP, ptr, sb.st_size );
+        write_http_response( reqP, (char*)ptr, sb.st_size );
         (void) munmap( ptr, sb.st_size );
         close( fd );
-        printf( "%s\n", reqP->buf );
-        fflush( stdout );
-        reqP->buf_idx = 0; // writing from offset 0
         return 0;
     } else {
         int in_fd[2], out_fd[2];
@@ -143,17 +122,47 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         if ( fork() == 0 ) {
             dup2(in_fd[0], 0);
             dup2(out_fd[1], 1);
+            // fprintf(stderr, "exec\n");
             close(in_fd[0]); close(in_fd[1]); close(out_fd[0]); close(out_fd[1]);
-            execlp(file, file);
+            execl(file, file, (char*)0);
         } else {
             close(in_fd[0]); close(out_fd[1]);
-            write(in_fd[1], query, sizeof(query));
+            write(in_fd[1], query, strlen(query));
             close(in_fd[1]);
             FD_SET(out_fd[0], master_set);
+            pipe_fd_to_reqP[out_fd[0]] = reqP;
+            fprintf(stderr, "pipe_fd_to_reqP[%d] = %p\n", out_fd[0], reqP );
         }
+        return 2;
     }
 
     return 0;
+}
+
+void write_http_response( http_request *reqP, char *str, size_t len ) {
+    fprintf(stderr, "write_http_response\n");
+    int buflen;
+    char timebuf[100];
+    time_t now;
+    char buf[10000];
+
+    reqP->buf_len = 0;
+
+    buflen = snprintf( buf, sizeof(buf), "HTTP/1.1 200 OK\015\012Server: SP TOY\015\012" );
+    add_to_buf( reqP, buf, buflen );
+    now = time( (time_t*) 0 );
+    (void) strftime( timebuf, sizeof(timebuf), "%a, %d %b %Y %H:%M:%S GMT", gmtime( &now ) );
+    buflen = snprintf( buf, sizeof(buf), "Date: %s\015\012", timebuf );
+    add_to_buf( reqP, buf, buflen );
+    buflen = snprintf( buf, sizeof(buf), "Content-Length: %ld\015\012", (int64_t) len );
+    add_to_buf( reqP, buf, buflen );
+    buflen = snprintf( buf, sizeof(buf), "Connection: close\015\012\015\012" );
+    add_to_buf( reqP, buf, buflen );
+
+    add_to_buf( reqP, str, len );
+    printf( "%s\n", reqP->buf );
+    fflush( stdout );
+    reqP->buf_idx = 0; // writing from offset 0
 }
 
 
@@ -182,18 +191,18 @@ static char* get_request_line( http_request *reqP ) {
     char *bufP = reqP->buf;
     int buf_len = reqP->buf_len;
 
-    for ( begin = reqP->buf_idx ; reqP->buf_idx < buf_len; ++reqP->buf_idx ) {
-    c = bufP[ reqP->buf_idx ];
-    if ( c == '\012' || c == '\015' ) {
-        bufP[reqP->buf_idx] = '\0';
-        ++reqP->buf_idx;
-        if ( c == '\015' && reqP->buf_idx < buf_len &&
-            bufP[reqP->buf_idx] == '\012' ) {
-        bufP[reqP->buf_idx] = '\0';
-        ++reqP->buf_idx;
+    for ( begin = reqP->buf_idx ; (int)reqP->buf_idx < buf_len; ++reqP->buf_idx ) {
+        c = bufP[ reqP->buf_idx ];
+        if ( c == '\012' || c == '\015' ) {
+            bufP[reqP->buf_idx] = '\0';
+            ++reqP->buf_idx;
+            if ( c == '\015' && (int)reqP->buf_idx < buf_len &&
+                bufP[reqP->buf_idx] == '\012' ) {
+            bufP[reqP->buf_idx] = '\0';
+            ++reqP->buf_idx;
+            }
+            return &(bufP[begin]);
         }
-        return &(bufP[begin]);
-    }
     }
     fprintf( stderr, "http request format error\n" );
     exit( 1 );
@@ -276,9 +285,8 @@ static void* e_realloc( void* optr, size_t size ) {
 
     ptr = realloc( optr, size );
     if ( ptr == (void*) 0 ) {
-    (void) fprintf( stderr, "out of memory\n" );
-    exit( 1 );
+        (void) fprintf( stderr, "out of memory\n" );
+        exit( 1 );
     }
     return ptr;
 }
-    

@@ -19,23 +19,25 @@
 typedef struct {
     char hostname[512];     // hostname
     unsigned short port;    // port to listen
-    int listen_fd;      // fd to wait for a new connection
+    int listen_fd;          // fd to wait for a new connection
 } http_server;
 
 typedef struct {
-    int conn_fd;        // fd to talk with client
-    int status;         // not used, error, reading (from client)
-                                // writing (to client)
+    int conn_fd;            // fd to talk with client
+    int status;             // not used, error, reading (from client)
+                            // writing (to client)
     char file[MAXBUFSIZE];  // requested file
     char query[MAXBUFSIZE]; // requested query
     char host[MAXBUFSIZE];  // client host
-    char* buf;          // data sent by/to client
-    size_t buf_len;     // bytes used by buf
+    char* buf;              // data sent by/to client
+    size_t buf_len;         // bytes used by buf
     size_t buf_size;        // bytes allocated for buf
     size_t buf_idx;         // offset for reading and writing
 } http_request;
 
 static char* logfilenameP;  // log file name
+
+http_request **pipe_fd_to_reqP;
 
 
 // Forwards
@@ -64,6 +66,8 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
 
 static void set_ndelay( int fd );
 // Set NDELAY mode on a socket.
+
+void write_http_response( http_request *reqP, char *str, size_t len );
 
 int main( int argc, char** argv ) {
     http_server server;     // http server
@@ -100,22 +104,23 @@ int main( int argc, char** argv ) {
         init_request( &requestP[i] );
     requestP[ server.listen_fd ].conn_fd = server.listen_fd;
     requestP[ server.listen_fd ].status = READING;
+    pipe_fd_to_reqP = (http_request**) malloc( sizeof(http_request*) * maxfd);
 
     fprintf( stderr, "\nstarting on %.80s, port %d, fd %d, maxconn %d, logfile %s...\n", server.hostname, server.port, server.listen_fd, maxfd, logfilenameP );
 
     // Main loop.
-    fd_set master_set;
+    fd_set master_set, working_set;
     FD_ZERO(&master_set);
     FD_SET(server.listen_fd, &master_set);
     while (1) {
         struct timeval timeout;
         timeout.tv_sec = 5;
         timeout.tv_usec = 0;
-        fd_set working_set;
         memcpy(&working_set, &master_set, sizeof(fd_set));
         select(maxfd + 1, &working_set, NULL, NULL, &timeout);
 
         if (FD_ISSET(server.listen_fd, &working_set)) {
+            fprintf(stderr, "wait conn\n"); fflush(stdout);
             // Wait for a connection.
             clilen = sizeof(cliaddr);
             conn_fd = accept( server.listen_fd, (struct sockaddr *) &cliaddr, (socklen_t *) &clilen );
@@ -134,40 +139,58 @@ int main( int argc, char** argv ) {
 
             fprintf( stderr, "getting a new request... fd %d from %s\n", conn_fd, requestP[conn_fd].host );
 
-            // while (1) {
-            ret = read_header_and_file( &requestP[conn_fd], &master_set, &err );
-            if ( ret > 0 ) continue;
-            else if ( ret < 0 ) {
-                // error for reading http header or requested file
-                fprintf( stderr, "error on fd %d, code %d\n",
-                    requestP[conn_fd].conn_fd, err );
-                requestP[conn_fd].status = ERROR;
-                close( requestP[conn_fd].conn_fd );
-                free_request( &requestP[conn_fd] );
-                break;
-            } else if ( ret == 0 ) {
-                // ready for writing
-                fprintf( stderr, "writing (buf %p, idx %d) %d bytes to request fd %d\n",
-                    requestP[conn_fd].buf, (int) requestP[conn_fd].buf_idx,
-                    (int) requestP[conn_fd].buf_len, requestP[conn_fd].conn_fd );
+            while (1) {
+                ret = read_header_and_file( &requestP[conn_fd], &master_set, &err );
+                if ( ret < 0 ) {
+                    // error for reading http header or requested file
+                    fprintf( stderr, "error on fd %d, code %d\n",
+                        requestP[conn_fd].conn_fd, err );
+                    requestP[conn_fd].status = ERROR;
+                    close( requestP[conn_fd].conn_fd );
+                    free_request( &requestP[conn_fd] );
+                    break;
+                } else if ( ret == 0 ) {
+                    // ready for writing
+                    fprintf( stderr, "writing (buf %p, idx %d) %d bytes to request fd %d\n",
+                        requestP[conn_fd].buf, (int) requestP[conn_fd].buf_idx,
+                        (int) requestP[conn_fd].buf_len, requestP[conn_fd].conn_fd );
 
-                // write once only and ignore error
-                nwritten = write( requestP[conn_fd].conn_fd, requestP[conn_fd].buf, requestP[conn_fd].buf_len );
-                fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, requestP[conn_fd].conn_fd );
-                close( requestP[conn_fd].conn_fd );
-                free_request( &requestP[conn_fd] );
-                break;
+                    // write once only and ignore error
+                    nwritten = write( requestP[conn_fd].conn_fd, requestP[conn_fd].buf, requestP[conn_fd].buf_len );
+                    fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, requestP[conn_fd].conn_fd );
+                    close( requestP[conn_fd].conn_fd );
+                    free_request( &requestP[conn_fd] );
+                    break;
+                } else if (ret == 2) break;
             }
-            // }
         } else {
-            for ( i = 0; i < maxfd; i++ ) {
-                http_request *reqP = &requestP[conn_fd];
-                reqP->buf_len = 0;
+            for ( i = 4; i < maxfd; i++ ) {
+                if (FD_ISSET( i, &working_set )) {
+                    fprintf(stderr, "fd%d\n", i);
+                    http_request *reqP = pipe_fd_to_reqP[i];
+                    char *buf = (char*)malloc( sizeof(char)*1048576 );
+                    int len = read( i, buf, 1048576 );
+                    fprintf(stderr, "buf: %s\\buf\n", buf);
+                    write_http_response( reqP, buf, len );
+                    FD_CLR( i, &master_set );
+                    close( i );
+                    free(buf);
 
+                    // ready for writing
+                    fprintf( stderr, "writing (buf %p, idx %d) %d bytes to request fd %d\n",
+                        reqP->buf, (int) reqP->buf_idx, (int) reqP->buf_len, reqP->conn_fd );
+
+                    // write once only and ignore error
+                    nwritten = write( reqP->conn_fd, reqP->buf, reqP->buf_len );
+                    fprintf( stderr, "complete writing %d bytes on fd %d\n", nwritten, reqP->conn_fd );
+                    close( reqP->conn_fd );
+                    free_request( reqP );
+                }
             }
         }
     }
     free( requestP );
+    free( pipe_fd_to_reqP );
     return 0;
 }
 
