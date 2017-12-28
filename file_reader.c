@@ -1,3 +1,4 @@
+/* b05902094 蘇多門 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

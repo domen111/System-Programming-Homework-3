@@ -1,12 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>SP Homework 3</title>
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>SP Homework 3</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootswatch/4.0.0-beta.2/cerulean/bootstrap.min.css">
 </head>
 
-<body>
-	<h1> Hi, Welcome to Domen's web server! </h1>
+<body class="jumbotron">
+  <!-- <h1> Hi, Welcome to Domen's web server! </h1> -->
+
+
+<div class="jumbotron">
+  <h1 class="display-3">Hello, world!</h1>
+  <p class="lead">This is the default page of Domen's simple web server.</p>
+  <hr class="my-4">
+</div>
 </body>
 
 </html>

@@ -1,3 +1,4 @@
+/* b05902094 蘇多門 */
 #include <time.h>
 #include <fcntl.h>
 #include <ctype.h>
@@ -142,8 +143,11 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
         
         fd = open(logfilenameP, O_RDWR);
         TimeInfo *p_map = (TimeInfo*)mmap(0, sizeof(TimeInfo),  PROT_READ,  MAP_SHARED, fd, 0);
+        close(fd);
         
-        char message_fmt[] = "<h1>info</h1> <br>running: %s<br>finished:%s<br>exit time: %s %s";
+        char message_fmt[10240] = "<h1>info</h1> <br>running: %s<br>finished:%s<br>exit time: %s %s";
+        fd = open("info", O_RDWR);
+        read(fd, message_fmt, sizeof(message_fmt));
         char message[sizeof(message_fmt)+2048];
         sprintf(message, message_fmt, running, finished, p_map->time, p_map->name);
         write_http_response( reqP, message, strlen(message), "200 OK", "text/html; charset=utf-8" );
