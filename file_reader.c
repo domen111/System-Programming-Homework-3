@@ -39,7 +39,6 @@ int main()
     write(fd,"",1);
 
     p_map = (TimeInfo*) mmap(0, sizeof(TimeInfo), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-    printf("mmap address:%#x\n",(unsigned int)&p_map); // 0x00000
     close(fd);
 
 
@@ -49,15 +48,10 @@ int main()
     memcpy(p_map->time, &c_time_string , sizeof(c_time_string));
     memcpy(p_map->name, query, (int)strlen(query) + 1);
     
-    printf("initialize over\n ");
-
     munmap(p_map, sizeof(TimeInfo));
-    printf("umap ok \n");
-
 
     fd = open("log", O_RDWR);
     p_map = (TimeInfo*)mmap(0, sizeof(TimeInfo),  PROT_READ,  MAP_SHARED, fd, 0);
-    printf("%s\n", p_map->time);
 
 	free(query);
     return 0;
