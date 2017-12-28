@@ -10,3 +10,6 @@ file_reader: file_reader.c
 
 slow_file_reader: slow_file_reader.c
 	gcc slow_file_reader.c -o slow_file_reader $(args)
+
+clean:
+	rm server file_reader slow_file_reader log
