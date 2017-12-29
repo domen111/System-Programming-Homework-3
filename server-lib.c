@@ -180,7 +180,7 @@ static int read_header_and_file( http_request* reqP, fd_set *master_set, int *er
             execl(file, file, (char*)0);
         } else {
             close(in_fd[0]); close(out_fd[1]);
-            write(in_fd[1], query_filename, strlen(query));
+            write(in_fd[1], query_filename, strlen(query_filename));
             close(in_fd[1]);
             FD_SET(out_fd[0], master_set);
             pipe_fd_to_reqP[out_fd[0]] = reqP;
