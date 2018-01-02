@@ -208,6 +208,7 @@ int main( int argc, char** argv ) {
                     fprintf(stderr, "buf: %s\\buf\n", buf);
                     int stat;
                     waitpid(pipe_fd_to_pid[i], &stat, 0);
+                    stat = WEXITSTATUS(stat);
 					finish_pid(pipe_fd_to_pid[i]);
                     if (stat == 0) {
                         write_http_response( reqP, buf, len, "200 OK", "text/plain; charset=utf-8");
